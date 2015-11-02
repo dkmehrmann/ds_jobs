@@ -11,7 +11,7 @@ The end goal for item 1 is clear, but the end goal for item 2 is not clearly def
 
 ### Technical Details
 
-In order to better demonstrate my process and provide the necessary tools to repeat this analysis, I code each step in the form of a Jupyter(iPython) Notebook and then write the steps in the form of functions in a Python script called `scrapy.py`. The steps are as follows:
+In order to better demonstrate my process and provide the necessary tools to repeat this analysis, I code each step in a Jupyter(iPython) Notebook and then write the steps in the form of functions in a Python script called `scrapy.py`. The steps are as follows:
 
 1. `web_scraping.ipynb` gets the BeautifulSoup from each job board and parses the links to the actual jobs
 2. `iterate.ipynb` provides pagination functionality to walk through each page of job postings
