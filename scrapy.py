@@ -4,6 +4,7 @@ import re
 import time
 import sys
 import pandas as pd
+import datetime as dt  
 
 
 def get_soup(url):
@@ -62,7 +63,7 @@ def get_li_links(li_soup, li_job_ids):
                 re.search(regex, href).group(1) not in li_job_ids): # and we don't alread have that job
                 li_jobs.append(href)                                # add the job to the list of jobs
                 li_job_ids.append(re.search(regex, href).group(1))  # add the job id to the list of job 
-    return li_jobs, li_job_ids
+    return li_jobs, list(set(li_job_ids))
 
 
 
@@ -113,6 +114,7 @@ def crawl_gd(n_pages=5,sleep_timer=10,q='ds'):
 def crawl_kg(n_pages = 10, sleep_timer=10):
     
     kg_p1 = 'https://www.kaggle.com/forums/f/145/data-science-jobs'
+    
     kg_links = []
     kg_ids = []
 
@@ -134,26 +136,40 @@ def crawl_kg(n_pages = 10, sleep_timer=10):
 
 
 
-def crawl_li(n_pages = 10, sleep_timer=10):
+def crawl_li(n_pages = 10, sleep_timer=10, q='ds'):
     
-    li_p1 = 'https://www.linkedin.com/job/data-scientist-jobs-chicago-il/?sort=relevance&page_num=1&trk=jserp_pagination_1'
+    if q == 'ds':
+        li_p1 = 'https://www.linkedin.com/job/data-scientist-jobs-chicago-il/?sort=relevance&page_num=1&trk=jserp_pagination_1'
+    elif q=='stats':
+        li_p1 = 'https://www.linkedin.com/job/statistician-jobs-chicago-il/?sort=relevance&page_num=1&trk=jserp_pagination_1'
+    else:
+        sys.exit("Not a Valid Query! Must be one of 'ds' or 'stats'")
+
     li_links = []
     li_ids = []
 
     for i in range(1,n_pages + 1):
         print('pulling links from page {0}'.format(i))
+        
         if i == 1:
             li_links, li_ids = get_li_links(get_soup(li_p1), li_ids)
             print('Got {0} links from page {1}'.format(len(li_links),i))
+        
         else:
-            li_url = 'https://www.linkedin.com/job/data-scientist-jobs-chicago-il/?sort=relevance&page_num={0}&trk=jserp_pagination_{0}'.format(i)
+            if q == 'ds':   
+                li_url = 'https://www.linkedin.com/job/data-scientist-jobs-chicago-il/?sort=relevance&page_num={0}&trk=jserp_pagination_{0}'.format(i)
+            else:
+                li_url = 'https://www.linkedin.com/job/statistician-jobs-chicago-il/?sort=relevance&page_num={0}&trk=jserp_pagination_{0}'.format(i)
+            
             links, ids = get_li_links(get_soup(li_url), li_ids)
             li_links.extend(links)
             li_ids.extend(ids)
             print('Got {0} links from page {1}'.format(len(links),i))
         time.sleep(sleep_timer)
         
-    return li_links
+    return li_links, list(set(li_ids))
+
+
 
 
 
@@ -206,12 +222,15 @@ def get_gd_df(links):
     ct = 0
     regex = r'ListingId=(.*)'
     text = {}
-
+    link_dict = {}
     for link in links:
         ct += 1
         ID = re.search(regex, link).group(1)
-        text[ID] = get_text(link)
-        
+        try:
+            text[ID] = get_text(link)
+            link_dict[ID] = link
+        except:
+            continue
         if ct % 10 == 0:
             print('Opened link {0} of {1}'.format(ct,len(links)))
         
@@ -223,4 +242,106 @@ def get_gd_df(links):
     df[['Title', 'Location']] = df[1].apply(pd.Series)
     df = df.drop(1,1)
     df = df.rename(columns = {0:'Text'})
+    df['link'] = pd.Series(link_dict)
+    df['date'] = dt.datetime.today().strftime("%m/%d/%Y")
     return df
+
+
+
+def parse_ttl_loc_li(text):
+    regex_co = r'^(.*?)[-]'
+    regex_ttl = r'[-](.*?)[(]'
+    regex_loc = r'[(](.*?)[)]'
+    try:
+        job_title = text.split(' at ')[0].strip()
+        location = text.split(' at ')[1].split(' in ')[1].split(' - ')[0].strip()
+        company = text.split(' at ')[1].split(' in ')[0].strip()
+    except:
+        job_title = 'NA'
+        location = 'NA'
+        company = 'NA'
+        
+    return job_title, location, company
+
+
+
+def get_li_df(links):
+    ct = 0
+    regex = r'/jobs2/view/(.*?)[?]'
+    text = {}
+    link_dict = {}
+    
+    for link in links:
+        ct += 1
+        ID = re.search(regex, link).group(1)
+        
+        try:
+            text[ID] = get_text(link)
+            link_dict[ID] = link
+        except:
+            continue
+        
+        if ct % 10 == 0:
+            print('Opened link {0} of {1}'.format(ct,len(links)))
+        
+        time.sleep(5)
+    
+    series = pd.Series(text)
+    parsed = series.apply(parse_ttl_loc_li)
+    df = pd.concat([series, parsed], axis=1)
+    df[['Title', 'Location', 'Company']] = df[1].apply(pd.Series)
+    df = df.drop(1,1)
+    df = df.rename(columns = {0:'Text'})
+    df['link'] = pd.Series(link_dict)
+    df['date'] = dt.datetime.today().strftime("%m/%d/%Y")
+    return df
+
+
+def parse_ttl_loc_kg(text):
+    regex_co = r'^(.*?)[-]'
+    regex_ttl = r'[-](.*?)[(]'
+    regex_loc = r'[(](.*?)[)]'
+    
+    job_title = re.search(regex_ttl, text).group(1).strip()
+    location = re.search(regex_loc, text).group(1).strip()
+    company = re.search(regex_co, text).group(1).strip()
+        
+    return job_title, location, company
+
+
+
+def get_kg_df(links):
+    ct = 0
+    regex = r'/forums/f/145/data-science-jobs/t/(.*?)[/]'
+    text = {}
+    link_dict = {}
+    
+    for link in links:
+        ct += 1
+        ID = re.search(regex, link).group(1)
+        try:
+            text[ID] = get_text(link)
+            link_dict[ID] = link
+        except:
+            continue
+        if ct % 10 == 0:
+            print('Opened link {0} of {1}'.format(ct,len(links)))
+        
+        time.sleep(5)
+    
+    series = pd.Series(text)
+    parsed = series.apply(parse_ttl_loc_kg)
+    df = pd.concat([series, parsed], axis=1)
+    df[['Title', 'Location', 'Company']] = df[1].apply(pd.Series)
+    df = df.drop(1,1)
+    df = df.rename(columns = {0:'Text'})
+    df['link'] = pd.Series(link_dict)
+    df['date'] = dt.datetime.today().strftime("%m/%d/%Y")
+    return df
+
+
+def remove_dup_rows(df1, df2):
+    
+    df3 = pd.concat([df1,df2])
+    groups = df3.groupby(level=0)  
+    return groups.last()
