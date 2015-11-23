@@ -15,7 +15,7 @@ stats_df_gd = get_gd_df(stats_links_gd)
 ### Kaggle ############################
 
 ds_links_kg, ds_ids_kg = crawl_kg()
-kg_df_kg = get_kg_df(ds_links_kg)
+ds_df_kg = get_kg_df(ds_links_kg)
 
 
 ### LinkedIn ##########################
